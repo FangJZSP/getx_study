@@ -192,7 +192,7 @@ class GetInstance {
 
 #### GetBuilder刷新机制
 
-#####      
+#####       
 
 #### Obx刷新机制
 
@@ -294,13 +294,21 @@ abstract class _RxImpl<T> extends RxNotifier<T> with RxObjectMixin<T> {
 /// 这个关键字使得你可以在不使用继承的情况下，将其他类的代码和功能整合到一个类中。
 class RxNotifier<T> = RxInterface<T> with NotifyManager<T>;
 
+
 mixin NotifyManager<T> {
+
+  /// 声明并初始化了一个类型为 GetStream 的流对象 subject
   GetStream<T> subject = GetStream<T>();
+
+  /// 一个包含流及其订阅的map _subscriptions
   final _subscriptions = <GetStream, List<StreamSubscription>>{};
 
   bool get canUpdate => _subscriptions.isNotEmpty;
 
   /// 内置callBack 的 GetStream类型
+  /// 这个方法接受一个 GetStream<T> 对象作为参数，并检查它是否已在 _subscriptions 中。
+  /// 如果不在，它就创建一个订阅到该流的 StreamSubscription，并将其添加到 _subscriptions 中。
+  /// 这样，当流发出新的数据时，它就会接收并将其添加到 subject 中。
   void addListener(GetStream<T> rxGetx) {
     if (!_subscriptions.containsKey(rxGetx)) {
       final subs = rxGetx.listen((data) {
@@ -336,62 +344,81 @@ mixin NotifyManager<T> {
   }
 }
 
+///  on 说明只能在 NotifyManager 这个类或这个类的子类 上用 
 mixin RxObjectMixin<T> on NotifyManager<T> {
   late T _value;
 
+  /// 将 value 直接更新并将其添加到数据流中
   void refresh() {
     subject.add(value);
   }
 
-  T call([T? v]) {
-    if (v != null) {
-      value = v;
-    }
-    return value;
-  }
-
   bool firstRebuild = true;
+  bool sentToStream = false;
 
+  /// Same as `toString()` but using a getter.
   String get string => value.toString();
 
   @override
   String toString() => value.toString();
 
+  /// Returns the json representation of `value`.
   dynamic toJson() => value;
 
+  /// This equality override works for _RxImpl instances and the internal
+  /// values.
   @override
-  bool operator ==(dynamic o) {
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object o) {
+    // Todo, find a common implementation for the hashCode of different Types.
     if (o is T) return value == o;
     if (o is RxObjectMixin<T>) return value == o.value;
     return false;
   }
 
   @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
   int get hashCode => _value.hashCode;
 
+  /// 一个value的setter函数。
+  /// 更新value的值，并将其添加到数据流中，更新观察者小部件
   /// subject.add(_value)，内部逻辑是自动刷新操作
   set value(T val) {
     if (subject.isClosed) return;
+    sentToStream = false;
     if (_value == val && !firstRebuild) return;
     firstRebuild = false;
     _value = val;
-
+    sentToStream = true;
     subject.add(_value);
   }
 
-  /// 会有一个添加监听的操作
+  /// 在返回 _value 值之前，会添加一个监听器到 subject。
   T get value {
-    if (RxInterface.proxy != null) {
-      RxInterface.proxy!.addListener(subject);
-    }
+    RxInterface.proxy?.addListener(subject);
     return _value;
   }
 
-  Stream<T?> get stream => subject.stream;
+  Stream<T> get stream => subject.stream;
 
+  /// 立即使用当前value启动流
+  StreamSubscription<T> listenAndPump(void Function(T event) onData,
+      {Function? onError, void Function()? onDone, bool? cancelOnError}) {
+    final subscription = listen(
+      onData,
+      onError: onError,
+      onDone: onDone,
+      cancelOnError: cancelOnError,
+    );
+
+    subject.add(value);
+
+    return subscription;
+  }
+
+  /// bindStream函数就是用来将一个Stream<T>绑定到一个Rx<T>对象上，以此来保持它们的值同步更新。
   void bindStream(Stream<T> stream) {
-    final listSubscriptions =
-    _subscriptions[subject] ??= <StreamSubscription>[];
+    final listSubscriptions = _subscriptions[subject] ??= <StreamSubscription>[];
     listSubscriptions.add(stream.listen((va) => value = va));
   }
 }
@@ -466,20 +493,27 @@ mixin RxObjectMixin<T> on NotifyManager<T> {
 说完了_RxImpl 这类继承又with的，那么要看with的这个RxNotifier的RxInterface
 with的NotifyManager中的GetStream
 
-那为啥GetStream的add会有刷新操作，根据大佬的说法和猜测
+那为啥GetStream的add会有刷新操作
 
 - 调用add方法时候，会调用 _notifyData 方法
 - _notifyData 方法中，会遍历 _onData 列表，根据条件会执行其泛型的 _data 的方法
-- 我猜，_data 中的方法体，十有八九在某个地方肯定添加了 setState()
 
 下面看一下GetStream这个类
 
 ```dart
+typedef OnData<T> = void Function(T data);
+
+class LightSubscription<T> extends StreamSubscription<T> {
+  OnData<T>? _data;
+}
+
 class GetStream<T> {
   GetStream({this.onListen, this.onPause, this.onResume, this.onCancel});
 
+  /// 待刷新元素 列表
   List<LightSubscription<T>>? _onData = <LightSubscription<T>>[];
 
+  /// 加上监听
   FutureOr<void> addSubscription(LightSubscription<T> subs) async {
     if (!_isBusy!) {
       return _onData!.add(subs);
@@ -489,6 +523,7 @@ class GetStream<T> {
     }
   }
 
+  /// 遍历_onData列表元素 猜测_data方法中 应该有setState
   void _notifyData(T data) {
     _isBusy = true;
     for (final item in _onData!) {
@@ -503,6 +538,9 @@ class GetStream<T> {
 
   T? get value => _value;
 
+  bool get isClosed => _onData == null;
+
+  /// 调用add后 再调用_notifyData
   void add(T event) {
     assert(!isClosed, 'You cannot add event to closed Stream');
     _value = event;
@@ -510,15 +548,94 @@ class GetStream<T> {
   }
 }
 
-typedef OnData<T> = void Function(T data);
-
-class LightSubscription<T> extends StreamSubscription<T> {
-  OnData<T>? _data;
-}
-
 ```
 
+总结Rx<T>内置了GetStream实例，类似于ChangeNotifier，添加callBack回调，外部可以手动触发，同时Rx使用set Value时，会触发
+subject.add(_value), 内部就是自动刷新，使用get Value就是添加监听操作
 
+
+#### Obx刷新机制
+
+先看一下Obx的代码
+
+```dart
+typedef WidgetCallback = Widget Function();
+
+class Obx extends ObxWidget {
+  final WidgetCallback builder;
+
+  const Obx(this.builder, {Key? key}) : super(key: key);
+
+  @override
+  Widget build() => builder();
+}
+
+class ObxValue<T extends RxInterface> extends ObxWidget {
+  final Widget Function(T) builder;
+  final T data;
+
+  const ObxValue(this.builder, this.data, {Key? key}) : super(key: key);
+
+  @override
+  Widget build() => builder(data);
+}
+
+/// 说明obx实际上也是 statefulWidget
+abstract class ObxWidget extends StatefulWidget {
+  const ObxWidget({Key? key}) : super(key: key);
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(ObjectFlagProperty<Function>.has('builder', build));
+  }
+
+  @override
+  ObxState createState() => ObxState();
+
+  @protected
+  Widget build();
+}
+
+class ObxState extends State<ObxWidget> {
+
+  /// 实例化一个 RxNotifier() 对象， 成为 _observer
+  final _observer = RxNotifier();
+  
+  late StreamSubscription subs;
+
+  @override
+  void initState() {
+    super.initState();
+    
+    /// 初始化时 将setState 传到_observer的监听方法中 -> 引出疑问 RxNotifier 到底是什么呢
+    subs = _observer.listen(_updateTree, cancelOnError: false);
+  }
+
+  void _updateTree(_) {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  @override
+  void dispose() {
+    subs.cancel();
+    _observer.close();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      RxInterface.notifyChildren(_observer, widget.build);
+}
+```
+
+在哪里添加监听呢？？ 继续看上面 
+
+```dart
+
+```
 
 
 
