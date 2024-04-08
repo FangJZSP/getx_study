@@ -14,7 +14,7 @@ class DependenceInjectionPage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        title: const Text("Dependence Injection Page"),
+        title: const Text("GetX Demo"),
       ),
       body: Center(
         child: Column(
@@ -62,6 +62,36 @@ class DependenceInjectionPage extends StatelessWidget {
                   style: Theme.of(context).textTheme.headlineMedium,
                 );
               },
+            ),
+            Expanded(
+              child: GestureDetector(
+                onTap: logic.changeCat1,
+                child: Column(
+                  children: [
+                    Obx(() {
+                      return Text(
+                        "cat1: ${state.cat1.value?.name ?? ''}  ${state.cat1.value?.age ?? 0}",
+                        style: Theme.of(context).textTheme.headlineMedium,
+                      );
+                    }),
+                  ],
+                ),
+              ),
+            ),
+            Expanded(
+              child: GestureDetector(
+                onTap: logic.changeCat2,
+                child: Column(
+                  children: [
+                    Obx(() {
+                      return Text(
+                        "cat2: ${state.cat2.value.name ?? ''}  ${state.cat2.value.age ?? 0}",
+                        style: Theme.of(context).textTheme.headlineMedium,
+                      );
+                    }),
+                  ],
+                ),
+              ),
             ),
           ],
         ),
