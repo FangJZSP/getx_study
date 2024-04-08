@@ -1,8 +1,12 @@
 import 'dart:async';
 
-Stream<int> numberStream = Stream.fromIterable([1, 2, 3, 4, 5]);
+// 创建 StreamController
+StreamController<int> controller = StreamController<int>();
 
-StreamSubscription? numberSubscription;
+// 从 StreamController 获取 Stream
+Stream<int> numberStream = controller.stream;
+
+StreamSubscription<int>? numberSubscription;
 
 void onData(int number) {
   print('Number: $number');
@@ -25,6 +29,17 @@ void handleSubscription() {
   );
 }
 
-void main() {
+Future<void> main() async {
   handleSubscription();
+
+  // 添加数据到 Stream
+  for (var i = 1; i <= 5; i++) {
+    await Future.delayed(const Duration(seconds: 2));
+    controller.sink.add(i);
+  }
+
+  Future.delayed(const Duration(seconds: 5), () => controller.sink.add(6));
+
+  // 关闭 StreamController
+  //controller.close();
 }

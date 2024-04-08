@@ -80,12 +80,13 @@ class GetInstance {
     @deprecated InstanceBuilderCallback<S>? builder,
   }) {
     /// 调用_insert方法 注册实例
-    /// 使用find方法返回实例
     _insert(
         isSingleton: true,
         name: tag,
         permanent: permanent,
         builder: builder ?? (() => dependency));
+
+    /// 使用find方法返回实例
     return find<S>(tag: tag);
   }
 
@@ -191,18 +192,29 @@ class GetInstance {
 
 ### 刷新机制
 
-#### GetBuilder刷新机制
+#### GetBuilder
 
 ##### 使用场景展示一下
 
-##### 内置回收机制
+##### GetBuilder 内置回收机制 + 刷新逻辑
+
+代码如下 -> 精简版
 
 ```dart
+/// 继承了GetxController 和 StatefulWidget
 class GetBuilder<T extends GetxController> extends StatefulWidget {
   final GetControllerBuilder<T> builder;
   final bool global;
+  final Object? id;
   final String? tag;
   final bool autoRemove;
+  final bool assignId;
+  final Object Function(T value)? filter;
+  final void Function(GetBuilderState<T> state)? initState,
+      dispose,
+      didChangeDependencies;
+  final void Function(GetBuilder oldWidget, GetBuilderState<T> state)?
+  didUpdateWidget;
   final T? init;
 
   const GetBuilder({
@@ -211,10 +223,15 @@ class GetBuilder<T extends GetxController> extends StatefulWidget {
     this.global = true,
     required this.builder,
     this.autoRemove = true,
+    this.assignId = false,
     this.initState,
+    this.filter,
     this.tag,
+    this.dispose,
+    this.id,
+    this.didChangeDependencies,
+    this.didUpdateWidget,
   }) : super(key: key);
-
 
   @override
   GetBuilderState<T> createState() => GetBuilderState<T>();
@@ -229,21 +246,68 @@ class GetBuilderState<T extends GetxController> extends State<GetBuilder<T>>
 
   @override
   void initState() {
-    super.initState();
     widget.initState?.call(this);
 
+    /// 通过GetBuilder上泛型获取相应GetXController实例
     var isRegistered = GetInstance().isRegistered<T>(tag: widget.tag);
 
     if (widget.global) {
       if (isRegistered) {
+        /// 存在：直接使用；init传入的实例无效
+        if (GetInstance().isPrepared<T>(tag: widget.tag)) {
+          _isCreator = true;
+        } else {
+          _isCreator = false;
+        }
         controller = GetInstance().find<T>(tag: widget.tag);
       } else {
+        /// 不存在：使用init传入的实例
         controller = widget.init;
+        _isCreator = true;
         GetInstance().put<T>(controller!, tag: widget.tag);
       }
     } else {
       controller = widget.init;
+      _isCreator = true;
       controller?.onStart();
+    }
+
+    if (widget.filter != null) {
+      _filter = widget.filter!(controller!);
+    }
+
+
+    _subscribeToController();
+  }
+
+  /// 确保订阅了 controller 的更新。
+  /// 当 _filter 非空时，意味这不是所有的更新都会导致 widget 更新，而是当 _filter 判断为真时才更新。
+  /// 当 _filter 为空时，所有的更新都会触发 widget 的更新。
+  void _subscribeToController() {
+    _remove?.call();
+    _remove = (widget.id == null)
+        ? controller?.addListener(
+
+      /// 添加监听回调
+      /// 标签 <GetBuild核心>
+      _filter != null ? _filterUpdate : getUpdate,
+    )
+        : controller?.addListenerId(
+
+      /// 添加监听回调，必须设置id，update刷新的时候也必须写上配套的id
+      widget.id,
+      _filter != null ? _filterUpdate : getUpdate,
+    );
+  }
+
+  /// _filterUpdate 这个方法用于当过滤条件改变时，调用 getUpdate 来进行相应的更新操作
+  void _filterUpdate() {
+    var newFilter = widget.filter!(controller!);
+    if (newFilter != _filter) {
+      _filter = newFilter;
+
+      ///getUpdate()逻辑就是 setState()，刷新当前GetBuilder
+      getUpdate();
     }
   }
 
@@ -251,7 +315,10 @@ class GetBuilderState<T extends GetxController> extends State<GetBuilder<T>>
   void dispose() {
     super.dispose();
     widget.dispose?.call(this);
+
+    /// autoRemove可以控制是否自动回收GetXController实例
     if (_isCreator! || widget.assignId) {
+      /// 默认为true：默认开启自动回收
       if (widget.autoRemove && GetInstance().isRegistered<T>(tag: widget.tag)) {
         GetInstance().delete<T>(tag: widget.tag);
       }
@@ -265,6 +332,21 @@ class GetBuilderState<T extends GetxController> extends State<GetBuilder<T>>
     _filter = null;
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    widget.didChangeDependencies?.call(this);
+  }
+
+  @override
+  void didUpdateWidget(GetBuilder oldWidget) {
+    super.didUpdateWidget(oldWidget as GetBuilder<T>);
+    // to avoid conflicts when modifying a "grouped" id list.
+    if (oldWidget.id != widget.id) {
+      _subscribeToController();
+    }
+    widget.didUpdateWidget?.call(oldWidget, this);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -272,7 +354,128 @@ class GetBuilderState<T extends GetxController> extends State<GetBuilder<T>>
   }
 }
 
+/// 这个混入影响了一个 GetStateUpdater 函数，它可能被 GetBuilder()、SimpleBuilder()（或类似的）用来满足 GetStateUpdate 签名，用以替换 StateSetter。
+/// 这避免了控件处于 dispose() 状态时可能（但极其罕见）遇到的问题，并且将 API 从不优雅的 fn((){}) 中抽象出来。
+/// 函数签名通常指的是函数的名称，以及输入参数的数量、顺序和类型，还有函数返回值的类型
+mixin GetStateUpdaterMixin<T extends StatefulWidget> on State<T> {
+  // To avoid the creation of an anonym function to be GC later.
+  // ignore: prefer_function_declarations_over_variables
+
+  /// Experimental method to replace setState((){});
+  /// Used with GetStateUpdate.
+  void getUpdate() {
+    if (mounted) setState(() {});
+  }
+}
+
 ```
+
+##### Update
+
+```dart
+abstract class GetxController extends DisposableInterface
+    with ListenableMixin, ListNotifierMixin {
+
+  /// 每次调用 update() 时都会重建 GetBuilder；
+  /// 可以接受一个 id 的列表，只会更新匹配的 GetBuilder(id: )，而这些 id 可以在 GetBuilders 之间重用，像组标签一样。
+  /// 只有当条件为真时，更新才会通知这些控件。
+  /// condition : 是否刷新一个判断条件，默认为true（假设必须某个id大于3才能刷新：update([1, 2, 3, 4], index > 3) ）
+  void update([List<Object>? ids, bool condition = true]) {
+    if (!condition) {
+      return;
+    }
+    if (ids == null) {
+      refresh();
+    } else {
+      /// ids：和上面的Getbuilder中设置的id对应起来了，可刷新对应设置id的GetBuilder
+      for (final id in ids) {
+        refreshGroup(id);
+      }
+    }
+  }
+}
+
+```
+
+**refresh()**
+
+```dart
+
+/// GetStateUpdate的方法体是setState，每创建一个GetBuilder，都会在_updaters列表中，增加一个GetStateUpdate实例
+typedef GetStateUpdate = void Function();
+
+class ListNotifier implements Listenable {
+  /// _updaters中泛型就是一个方法
+  /// _updaters 列表用于存储当前添加的所有监听器
+  List<GetStateUpdate?>? _updaters = <GetStateUpdate?>[];
+
+  /// id情况下的更新方法
+  HashMap<Object?, List<GetStateUpdate>>? _updatersGroupIds = HashMap<Object?, List<GetStateUpdate>>();
+
+  /// 更新所有
+  @protected
+  void refresh() {
+    assert(_debugAssertNotDisposed());
+
+    /// 标签 <GetBuild核心>
+    _notifyUpdate();
+  }
+
+  void _notifyUpdate() {
+    for (var element in _updaters!) {
+      element!();
+    }
+  }
+
+  void _notifyIdUpdate(Object id) {
+    if (_updatersGroupIds!.containsKey(id)) {
+      final listGroup = _updatersGroupIds![id]!;
+      for (var item in listGroup) {
+        item();
+      }
+    }
+  }
+
+  /// 更新对应相应
+  @protected
+  void refreshGroup(Object id) {
+    assert(_debugAssertNotDisposed());
+    _notifyIdUpdate(id);
+  }
+
+  @override
+  Disposer addListener(GetStateUpdate listener) {
+    assert(_debugAssertNotDisposed());
+
+    /// 添加监听器到 GetBuilder，监听器是一个包含 setState() 的函数
+    _updaters!.add(listener);
+
+    /// 当GetBuilder被更新后，返回的 dispose 函数将被调用，从 _updaters 列表中移除当前添加的监听器
+    /// 这样可以防止因重新构建时重复通知监听器而产生的性能问题
+    return () => _updaters!.remove(listener);
+  }
+
+  Disposer addListenerId(Object? key, GetStateUpdate listener) {
+    _updatersGroupIds![key] ??= <GetStateUpdate>[];
+
+    /// 在GetBuilder中添加的监听就是一个方法参数，方法体里面就是 setState()
+    _updatersGroupIds![key]!.add(listener);
+    return () => _updatersGroupIds![key]!.remove(listener);
+  }
+
+/// ... 省略
+}
+```
+
+##### GetBuilder总结
+
+GetBuilder 的刷新机制主要由以下几个步骤组成：
+
+1. GetBuilder 控件在建立时，会将包含 setState() 方法的监听器添加到其 _updaters 列表中。setState() 是导致控件重新构建的主要方法。
+2. 当你通过调用 update() 方法来更新 GetBuilder 时，它会触发所有在 _updaters 列表中的监听器，从而导致所有相关的 GetBuilder
+   控件重新构建。
+3. 重新构建完成后，GetBuilder 会通过调用返回的 Disposer 函数来从 _updaters 列表中移除相关的监听器。这样做可以防止因重复通知监听器而造成的性能问题。
+   简单来说，GetBuilder 的刷新机制基于监听器模式，通过监听器的添加和移除，实现了对特定控件的高效的、有目的性的更新，而非全局刷新。
 
 #### Obx刷新机制
 
