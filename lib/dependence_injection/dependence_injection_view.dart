@@ -55,13 +55,16 @@ class DependenceInjectionPage extends StatelessWidget {
             GetBuilder<DependenceInjectionLogic>(
               /// 根据id进行更新 指定的id
               id: state.count3Id,
-              assignId: true,
+              //assignId: true,
               builder: (logic) {
                 return Text(
                   state.count3.toString(),
                   style: Theme.of(context).textTheme.headlineMedium,
                 );
               },
+            ),
+            const SizedBox(
+              height: 100,
             ),
             Expanded(
               child: GestureDetector(

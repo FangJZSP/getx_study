@@ -13,8 +13,10 @@ class DependenceInjectionState {
   String count3Id = "count3Id";
   int count3 = 100;
 
+  /// 实体类
   Rxn<Cat> cat1 = Rxn<Cat>();
   Rx<Cat> cat2 = Cat.fromJson({}).obs;
+  Rx<Cat> cat3 = Cat().obs;
 
   DependenceInjectionState() {
     ///Initialize variables
