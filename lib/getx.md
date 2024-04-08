@@ -7,24 +7,20 @@
 ```dart
 /// 使用put进行依赖注入
 var controller = Get.put(XxxController());
+// demo中我们这么写
 final logic = Get.put(DependenceInjectionLogic());
 
-/// getx 的接口
+/// getx 接口
 class _GetImpl extends GetInterface {}
 
 /// 注释 // ignore: non_constant_identifier_names 是 Dart 分析器的一部分，它告诉分析器忽略接下来的一行中的特定代码规则检查
 /// 全局、只读变量 实现单例
+/// getX暴露出来给我们使用的接口
 final Get = _GetImpl();
 
 /// 拓展
 extension Inst on GetInterface {
 
-  /// 在内存中注入实例<s>。
-  /// 不需要定义泛型类型`<[S]>`;因为它是从依赖参数推断出来的。
-  /// dependency要注入的实例
-  /// tag可选，使用一个标签作为“id”来创建多个相同“类型”的记录，标签不会与其他依赖类型使用的相同标签冲突。
-  /// permanent将实例保存在内存中并持久化它，而不是遵循Get。smartManagement”规则。虽然可以通过' GetInstance.reset() '和' Get.delete() '删除
-  /// 如果定义了依赖项，则必须从这里返回
   S put<S>(S dependency,
       {String? tag,
         bool permanent = false,
@@ -36,29 +32,12 @@ extension Inst on GetInterface {
 
 #### put的逻辑
 
-- 主要的逻辑看来还是GetInstance中
--
-    - 单例的实现，我们项目中的manager都用这种方式写的
--
-    - 全局的数据都是存在 _singl 中，这是一个map类型
--
-    -
-        - key：对象的runtimeType或者类的Type + tag
--
-    -
-        - value：_InstanceBuilderFactory类，我们传入dependency对象会存入这个类中
--
-    - _singl 用这个map存值的时候
--
-    -
-        - 如果map中有key和传入key相同的数据，传入的数据将不会被存储
--
-    -
-        - 也就是说相同类实例的对象，传入并不会被覆盖，只会存储第一条数据，后续被放弃
--
-    - 最后使用find方法，返回传入的实例
+看一下代码，学习一下
+
+点进去 GetInstance().put<S>(dependency, tag: tag, permanent: permanent);
 
 ```dart
+/// 主要的逻辑看来还是GetInstance中
 class GetInstance {
   /// 项目经常使用的单例模式
   factory GetInstance() => _getInstance ??= GetInstance._();
@@ -67,6 +46,11 @@ class GetInstance {
 
   static GetInstance? _getInstance;
 
+  /// 全局的数据都是存在 _singl 中，这是一个map类型
+  /// key：对象的runtimeType或者类的Type + tag
+  /// value：_InstanceBuilderFactory类，我们传入dependency对象会存入这个类中
+  /// 如果map中有key和传入key相同的数据，传入的数据将不会被存储
+  /// 也就是说相同类实例的对象，传入并不会被覆盖，只会存储第一条数据，后续被放弃
   static final Map<String, _InstanceBuilderFactory> _singl = {};
 
   /// 在内存中注入一个实例' <s> '以便全局访问。
@@ -103,8 +87,12 @@ class GetInstance {
     if (_singl.containsKey(key)) {
       final dep = _singl[key];
 
-      /// 在 GetX 中，标记为 "脏" 的依赖项是指在观察者没有监听这个依赖项时，可以被清除的对象。
-      /// 要清除的对象被标记为 "脏" 并放入队列中，当垃圾回收启动时，应用程序将会清除这些被标记为 "脏" 的对象，从而管理和释放内存。
+      /// 在 GetX 框架中，一个对象标记为 "脏"（dep.isDirty 返回 true）表示在没有观察者监听此对象时，它可以被清除或替换。
+      /// 这是一个内存优化策略，让没有用到的对象可以被合适地清理，这样就可以防止内存的浪费并且提升性能。
+      /// 为什么要检查 dep.isDirty 并给 _singl[key] 重新赋值？
+      /// 如果map _singl 中已有对应的 key，代码会检查对应的值 dep 是否存在，并检查它是否被标记为 "脏" (isDirty 是 true）。
+      /// 如果满足这些条件，那么代码会用新的 _InstanceBuilderFactory 替代旧的，这样可以释放旧的 dep 对象所占用的内存，用新的 _InstanceBuilderFactory 对象代替，从而达到内存管理的目的。
+      /// 这样的策略就是在一定的程度上最优化了内存的使用，保留必要的对象，且及时清理不再需要的对象。这就是为什么有 dep.isDirty 的判断，并且在该对象 "脏" 的情况下，重新给 _singl[key] 赋值。
       if (dep != null && dep.isDirty) {
         _singl[key] = _InstanceBuilderFactory<S>(
           isSingleton,
@@ -128,7 +116,7 @@ class GetInstance {
     }
   }
 
-  /// 根据类型(也可以是名称)生成键，以便在hashmap中注册Instance Builder。
+  /// 根据类型(也可以是名称)生成键，以便在map中注册Instance Builder。
   String _getKey(Type type, String? name) {
     return name == null ? type.toString() : type.toString() + name;
   }
@@ -141,12 +129,12 @@ class GetInstance {
 - find方法 就是从map中取数据的操作
 
 ```dart
-
-S find<S>({String? tag}) => GetInstance().find<S>(tag: tag);
-
+// 项目中我们这么用 -> 点进去看方法
 final state = Get
     .find<DependenceInjectionLogic>()
     .state;
+
+S find<S>({String? tag}) => GetInstance().find<S>(tag: tag);
 
 class GetInstance {
 
@@ -188,6 +176,36 @@ class GetInstance {
   }
 }
 
+S? _initDependencies<S>({String? name}) {
+  final key = _getKey(S, name); // 根据 S 和 name 获取键
+  final isInit = _singl[key]!.isInit; // 检查当前实例是否已经被初始化
+  S? i;
+  if (!isInit) { // 如果实例尚未被初始化
+    i = _startController<S>(tag: name); // 启动控制器并返回实例
+    if (_singl[key]!.isSingleton!) { // 如果实例是单例
+      _singl[key]!.isInit = true; // 标记该实例已被初始化
+      if (Get.smartManagement != SmartManagement.onlyBuilder) { // 如果 smartManagement 设置为非 onlyBuilder 模式
+        RouterReportManager.reportDependencyLinkedToRoute(_getKey(S, name)); // 报告路由与实例的依赖关系
+      }
+    }
+  }
+  return i; // 返回实例
+}
+
+/// 通过它的 [builderFunc] 获取实际的实例，或者获取持久化的实例。
+S getDependency() {
+  if (isSingleton!) { // 如果这个实例是单例
+    if (dependency == null) { // 如果这个单例还未被初始化
+      _showInitLog(); // 显示初始化的日志
+      dependency = builderFunc(); // 通过 builderFunc 来构建这个实例
+    }
+    return dependency!; // 返回这个单例
+  } else { // 如果这个实例不是单例
+    return builderFunc(); // 直接通过 builderFunc 来构建并返回这个实例
+  }
+}
+
+
 ```
 
 ### 刷新机制
@@ -201,6 +219,9 @@ class GetInstance {
 代码如下 -> 精简版
 
 ```dart
+typedef GetControllerBuilder<T extends DisposableInterface> = Widget Function(
+    T controller);
+
 /// 继承了GetxController 和 StatefulWidget
 class GetBuilder<T extends GetxController> extends StatefulWidget {
   final GetControllerBuilder<T> builder;
@@ -248,12 +269,14 @@ class GetBuilderState<T extends GetxController> extends State<GetBuilder<T>>
   void initState() {
     widget.initState?.call(this);
 
-    /// 通过GetBuilder上泛型获取相应GetXController实例
+    /// 通过传入 GetBuilder上泛型获取相应GetXController实例
+    /// eg : DependenceInjectionLogic? init,
     var isRegistered = GetInstance().isRegistered<T>(tag: widget.tag);
 
     if (widget.global) {
       if (isRegistered) {
-        /// 存在：直接使用；init传入的实例无效
+        /// 存在：直接使用 init传入的实例无效
+        /// isPrepared 用来 检查特定类型 S 的引用是否已被准备好（即已在内存中注册），且还未被初始化。
         if (GetInstance().isPrepared<T>(tag: widget.tag)) {
           _isCreator = true;
         } else {
@@ -261,7 +284,7 @@ class GetBuilderState<T extends GetxController> extends State<GetBuilder<T>>
         }
         controller = GetInstance().find<T>(tag: widget.tag);
       } else {
-        /// 不存在：使用init传入的实例
+        /// 不存在: 使用init传入的实例
         controller = widget.init;
         _isCreator = true;
         GetInstance().put<T>(controller!, tag: widget.tag);
@@ -423,6 +446,7 @@ class ListNotifier implements Listenable {
 
   void _notifyUpdate() {
     for (var element in _updaters!) {
+      /// setState ！！！
       element!();
     }
   }
@@ -443,6 +467,9 @@ class ListNotifier implements Listenable {
     _notifyIdUpdate(id);
   }
 
+  /// 小插曲: 怎么理解addListener方法
+  /// addListener 是一个常用于处理事件或数据更改的函数。
+  /// 通常情况下，你会将一个回调函数 作为参数传给 addListener，这个函数会在某个特定的事件发生 (比如数据变化）时被自动调用。
   @override
   Disposer addListener(GetStateUpdate listener) {
     assert(_debugAssertNotDisposed());
@@ -965,7 +992,7 @@ class GetStream<T> {
 使用set Value时，会触发 subject.add(_value), 内部就是自动刷新，
 使用get Value就是添加监听操作
 
-#### Obx刷新机制
+##### Obx组件
 
 先看一下Obx的代码
 
@@ -1109,8 +1136,18 @@ abstract class RxInterface<T> {
 }
 ```
 
-##### 总结
+##### Obx总结
 
+在GetX框架中，Obx是一个非常重要的组件，它用于观察可观察对象（Obx）的变化，并在检测到状态改变时自动刷新UI。以下是Obx刷新机制的简单总结：
 
+1. 创建状态：Obx 的刷新机制的首要步骤就是创建可观察的状态。在GetX中，我们可以通过.obs操作符创建可观察的状态。
+2. 检测状态变化：当你将可观察的状态放入Obx或Obx的别名（中后，GetX会自动监听这个状态的变化。
+3. 更新UI：一旦状态发生变化，Obx会自动刷新UI。它会找到引用了这个可观察对象的UI部分，并重新构建这部分UI。
+4. 状态修改：为了触发UI更新，我们需要改变可观察的状态。我们不能直接修改状态，而是应该使用.value属性来改变状态。
 
+举例来说：
+var count = 0.obs;
+Obx(()= Text('${count.value}'));
+count.value++;
 
+总的来说，Obx的刷新机制是GetX框架的核心之一，它使我们能够非常容易地在状态改变时更新UI，而不需要显式地调用setState等方法。

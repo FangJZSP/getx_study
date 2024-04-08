@@ -55,7 +55,7 @@ class DependenceInjectionPage extends StatelessWidget {
             GetBuilder<DependenceInjectionLogic>(
               /// 根据id进行更新 指定的id
               id: state.count3Id,
-              //assignId: true,
+              assignId: true,
               builder: (logic) {
                 return Text(
                   state.count3.toString(),
@@ -104,7 +104,6 @@ class DependenceInjectionPage extends StatelessWidget {
         children: [
           FloatingActionButton(
             onPressed: logic.count1add,
-            tooltip: 'Increment',
             child: const Icon(Icons.exposure_plus_1),
           ),
           const SizedBox(
@@ -112,7 +111,6 @@ class DependenceInjectionPage extends StatelessWidget {
           ),
           FloatingActionButton(
             onPressed: logic.count2sub,
-            tooltip: 'Increment',
             child: const Icon(Icons.exposure_minus_1),
           ),
           const SizedBox(
@@ -120,7 +118,6 @@ class DependenceInjectionPage extends StatelessWidget {
           ),
           FloatingActionButton(
             onPressed: logic.count3sub,
-            tooltip: 'Increment',
             child: const Icon(Icons.exposure_minus_2),
           ),
         ],
