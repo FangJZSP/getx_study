@@ -16,7 +16,7 @@ class _GetImpl extends GetInterface {}
 /// 全局、只读变量 实现单例
 final Get = _GetImpl();
 
-/// 拓展类
+/// 拓展
 extension Inst on GetInterface {
 
   /// 在内存中注入实例<s>。
@@ -38,15 +38,15 @@ extension Inst on GetInterface {
 
 - 主要的逻辑看来还是GetInstance中
 -
-    - 大家可以看看这地方单例的实现，我发现很多源码都用这种方式写的，非常简洁
+    - 单例的实现，我们项目中的manager都用这种方式写的
 -
-    - 全局的数据都是存在 _singl 中，这是个Map
+    - 全局的数据都是存在 _singl 中，这是一个map类型
 -
     -
         - key：对象的runtimeType或者类的Type + tag
 -
     -
-        - value：_InstanceBuilderFactory类，我们传入dependecy对象会存入这个类中
+        - value：_InstanceBuilderFactory类，我们传入dependency对象会存入这个类中
 -
     - _singl 用这个map存值的时候
 -
@@ -142,6 +142,7 @@ class GetInstance {
 ```dart
 
 S find<S>({String? tag}) => GetInstance().find<S>(tag: tag);
+
 final state = Get
     .find<DependenceInjectionLogic>()
     .state;
@@ -192,7 +193,86 @@ class GetInstance {
 
 #### GetBuilder刷新机制
 
-#####       
+##### 使用场景展示一下
+
+##### 内置回收机制
+
+```dart
+class GetBuilder<T extends GetxController> extends StatefulWidget {
+  final GetControllerBuilder<T> builder;
+  final bool global;
+  final String? tag;
+  final bool autoRemove;
+  final T? init;
+
+  const GetBuilder({
+    Key? key,
+    this.init,
+    this.global = true,
+    required this.builder,
+    this.autoRemove = true,
+    this.initState,
+    this.tag,
+  }) : super(key: key);
+
+
+  @override
+  GetBuilderState<T> createState() => GetBuilderState<T>();
+}
+
+class GetBuilderState<T extends GetxController> extends State<GetBuilder<T>>
+    with GetStateUpdaterMixin {
+  T? controller;
+  bool? _isCreator = false;
+  VoidCallback? _remove;
+  Object? _filter;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.initState?.call(this);
+
+    var isRegistered = GetInstance().isRegistered<T>(tag: widget.tag);
+
+    if (widget.global) {
+      if (isRegistered) {
+        controller = GetInstance().find<T>(tag: widget.tag);
+      } else {
+        controller = widget.init;
+        GetInstance().put<T>(controller!, tag: widget.tag);
+      }
+    } else {
+      controller = widget.init;
+      controller?.onStart();
+    }
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
+    widget.dispose?.call(this);
+    if (_isCreator! || widget.assignId) {
+      if (widget.autoRemove && GetInstance().isRegistered<T>(tag: widget.tag)) {
+        GetInstance().delete<T>(tag: widget.tag);
+      }
+    }
+
+    _remove?.call();
+
+    controller = null;
+    _isCreator = null;
+    _remove = null;
+    _filter = null;
+  }
+
+
+  @override
+  Widget build(BuildContext context) {
+    return widget.builder(controller!);
+  }
+}
+
+```
 
 #### Obx刷新机制
 
@@ -211,13 +291,6 @@ Obx刷新机制，最有趣应该就是变量改变后，包裹该变量的Obx�
 以RxInt为例子
 
 ```dart
-
-/// .obs 语法糖
-extension IntExtension on int {
-  /// Returns a `RxInt` with [this] `int` as initial value.
-  RxInt get obs => RxInt(this);
-}
-
 class RxInt extends Rx<int> {
   RxInt(int initial) : super(initial);
 
@@ -234,11 +307,19 @@ class RxInt extends Rx<int> {
   }
 }
 
+/// .obs 语法糖
+extension IntExtension on int {
+  /// Returns a `RxInt` with [this] `int` as initial value.
+  RxInt get obs => RxInt(this);
+}
+
 ```
 
 - 看一下Rx父类
 
 ```dart
+
+/// 继承自_RxImpl
 class Rx<T> extends _RxImpl<T> {
   Rx(T initial) : super(initial);
 
@@ -252,20 +333,30 @@ class Rx<T> extends _RxImpl<T> {
   }
 }
 
-/// 引出一个非常重要的类 => _RxImpl
-
 ```
+
+引出一个非常重要的类 => _RxImpl
+**简单来看**
 
 - _RxImpl 类继承了 RxNotifier 并且 with 了 RxObjectMixin
 - 这个类挺复杂的，看起来是 RxNotifier 和 RxObjectMixin 内容很多
-- 代码很多，先展示下完整代码，然后一一解释
+- 代码很多，先展示下完整代码
+-
+    - RxNotifier猜名字就是负责通知
+-
+    - RxObjectMixin猜名字 是Rx类型的父类 -> 猜错了 只是提供代码重用技术
 
 ```dart
 /// Rx 的基础类，管理所有类型的流逻辑。
 /// "流逻辑"是在编程中处理数据流的概念和技术，通常在处理异步数据源时使用，如用户输入、文件、Web API请求等。
 /// 流通常被视为可处理的数据元素序列，这些元素随时间推移而产生。流可以被观察（订阅）和操作（如筛选、转化、组合等），这就是所谓的"流逻辑"。
+/// 
+/// with 是一个关键字，主要用于 mixin 的实现。
+/// Mixin 是一种代码重用的技术，允许你在一个类中使用其他类的代码。
+/// 这个关键字使得你可以在不使用继承的情况下，将其他类的代码和功能整合到一个类中。
 abstract class _RxImpl<T> extends RxNotifier<T> with RxObjectMixin<T> {
   _RxImpl(T initial) {
+    /// _values是RxObjectMixin中的成员属性
     _value = initial;
   }
 
@@ -273,10 +364,15 @@ abstract class _RxImpl<T> extends RxNotifier<T> with RxObjectMixin<T> {
     subject.addError(error, stackTrace);
   }
 
+  /// 这个函数用于将数据流中的每一项都通过一个你提供的函数（mapper）转换成新的形式。
   Stream<R> map<R>(R mapper(T? data)) => stream.map(mapper);
 
+  /// 这个函数接收一个函数作为参数，这个函数会用当前值作为参数调用。然后将当前值传给 subject。
+  /// 当 subject 状态变化了，所有的订阅者都会更新。
   void update(void fn(T? val)) {
     fn(_value);
+
+    /// subject是NotifyManager中的成员属性
     subject.add(_value);
   }
 
@@ -289,37 +385,40 @@ abstract class _RxImpl<T> extends RxNotifier<T> with RxObjectMixin<T> {
   }
 }
 
-/// with 是一个关键字，主要用于 mixin 的实现。
-/// Mixin 是一种代码重用的技术，允许你在一个类中使用其他类的代码。
-/// 这个关键字使得你可以在不使用继承的情况下，将其他类的代码和功能整合到一个类中。
 class RxNotifier<T> = RxInterface<T> with NotifyManager<T>;
 
 
+/// 看名字就像一个 通知管理者
 mixin NotifyManager<T> {
 
   /// 声明并初始化了一个类型为 GetStream 的流对象 subject
   GetStream<T> subject = GetStream<T>();
 
-  /// 一个包含流及其订阅的map _subscriptions
+  /// 一个包含流及其订阅的map _subscriptions， key是Stream，value是StreamSubscription列表
   final _subscriptions = <GetStream, List<StreamSubscription>>{};
 
+  /// 订阅该stream的streamSubscription列表不为空 则可以更新
   bool get canUpdate => _subscriptions.isNotEmpty;
 
   /// 内置callBack 的 GetStream类型
   /// 这个方法接受一个 GetStream<T> 对象作为参数，并检查它是否已在 _subscriptions 中。
   /// 如果不在，它就创建一个订阅到该流的 StreamSubscription，并将其添加到 _subscriptions 中。
   /// 这样，当流发出新的数据时，它就会接收并将其添加到 subject 中。
+  /// 
+  ///  这是一个内部方法。订阅内部流的变化。
+  ///  这个方法的作用是：它监听并订阅内部数据流的变化，每当数据流有变动时，此方法都能接收到这些变化，然后进行相应的处理。
+  ///  这在响应式编程中是非常常见的操作，常用于处理异步数据的变更，例如网络请求、用户输入等等。
   void addListener(GetStream<T> rxGetx) {
     if (!_subscriptions.containsKey(rxGetx)) {
       final subs = rxGetx.listen((data) {
         if (!subject.isClosed) subject.add(data);
       });
-      final listSubscriptions =
-      _subscriptions[rxGetx] ??= <StreamSubscription>[];
+      final listSubscriptions = _subscriptions[rxGetx] ??= <StreamSubscription>[];
       listSubscriptions.add(subs);
     }
   }
 
+  /// 监听这个事情
   StreamSubscription<T> listen(void Function(T) onData, {
     Function? onError,
     void Function()? onDone,
@@ -332,6 +431,7 @@ mixin NotifyManager<T> {
         cancelOnError: cancelOnError ?? false,
       );
 
+  /// 关闭
   void close() {
     _subscriptions.forEach((getStream, _subscriptions) {
       for (final subscription in _subscriptions) {
@@ -394,6 +494,7 @@ mixin RxObjectMixin<T> on NotifyManager<T> {
   }
 
   /// 在返回 _value 值之前，会添加一个监听器到 subject。
+  /// <getValue>
   T get value {
     RxInterface.proxy?.addListener(subject);
     return _value;
@@ -428,70 +529,10 @@ mixin RxObjectMixin<T> on NotifyManager<T> {
 简化 _RxImpl，把需要关注的内容展示出来：此处有几个需要重点关注的点
 
 - RxInt是一个内置callback的数据类型（GetStream）
-- RxInt的value变量改变的时候（set value），会触发subject.add(_value)，内部逻辑是自动刷新操作
-- 获取RxInt的value变量的时候（get value），会有一个添加监听的操作
+- RxInt的value变量改变的时候（set value），会触发subject.add(_value)，猜测内部逻辑是自动刷新操作
+- 获取RxInt的value变量的时候（get value），会有一个添加监听的操作 RxInterface.proxy?.addListener(subject);
 
-```dart
-/// 代码简化后
-abstract class _RxImpl<T> extends RxNotifier<T> with RxObjectMixin<T> {
-
-  void update(void fn(T? val)) {
-    fn(_value);
-    subject.add(_value);
-  }
-}
-
-class RxNotifier<T> = RxInterface<T> with NotifyManager<T>;
-
-mixin NotifyManager<T> {
-  GetStream<T> subject = GetStream<T>();
-  final _subscriptions = <GetStream, List<StreamSubscription>>{};
-
-  bool get canUpdate => _subscriptions.isNotEmpty;
-
-  ///  这是一个内部方法。订阅内部流的变化。
-  ///  这个方法的作用是：它监听并订阅内部数据流的变化，每当数据流有变动时，此方法都能接收到这些变化，然后进行相应的处理。
-  ///  这在响应式编程中是非常常见的操作，常用于处理异步数据的变更，例如网络请求、用户输入等等。
-  void addListener(GetStream<T> rxGetx) {
-    if (!_subscriptions.containsKey(rxGetx)) {
-      final subs = rxGetx.listen((data) {
-        if (!subject.isClosed) subject.add(data);
-      });
-      final listSubscriptions =
-      _subscriptions[rxGetx] ??= <StreamSubscription>[];
-      listSubscriptions.add(subs);
-    }
-  }
-}
-
-mixin RxObjectMixin<T> on NotifyManager<T> {
-  late T _value;
-
-  void refresh() {
-    subject.add(value);
-  }
-
-  set value(T val) {
-    if (subject.isClosed) return;
-    if (_value == val && !firstRebuild) return;
-    firstRebuild = false;
-    _value = val;
-
-    subject.add(_value);
-  }
-
-  T get value {
-    if (RxInterface.proxy != null) {
-      RxInterface.proxy!.addListener(subject);
-    }
-    return _value;
-  }
-}
-
-```
-
-说完了_RxImpl 这类继承又with的，那么要看with的这个RxNotifier的RxInterface
-with的NotifyManager中的GetStream
+看样子subject很关键 我们看一下subject，它是一个GetStream实例
 
 那为啥GetStream的add会有刷新操作
 
@@ -503,15 +544,102 @@ with的NotifyManager中的GetStream
 ```dart
 typedef OnData<T> = void Function(T data);
 
+/// 继承自StreamSubscription 意味着可以处理流
 class LightSubscription<T> extends StreamSubscription<T> {
+  final RemoveSubscription<T> _removeSubscription;
+
+  LightSubscription(this._removeSubscription,
+      {this.onPause, this.onResume, this.onCancel});
+
+  final void Function()? onPause;
+  final void Function()? onResume;
+  final FutureOr<void> Function()? onCancel;
+
+  bool? cancelOnError = false;
+
+  @override
+  Future<void> cancel() {
+    _removeSubscription(this);
+    onCancel?.call();
+    return Future.value();
+  }
+
   OnData<T>? _data;
+
+  Function? _onError;
+
+  Callback? _onDone;
+
+  bool _isPaused = false;
+
+  @override
+  void onData(OnData<T>? handleData) => _data = handleData;
+
+  @override
+  void onError(Function? handleError) => _onError = handleError;
+
+  @override
+  void onDone(Callback? handleDone) => _onDone = handleDone;
+
+  @override
+  void pause([Future<void>? resumeSignal]) {
+    _isPaused = true;
+    onPause?.call();
+  }
+
+  @override
+  void resume() {
+    _isPaused = false;
+    onResume?.call();
+  }
+
+  @override
+  bool get isPaused => _isPaused;
+
+  @override
+  Future<E> asFuture<E>([E? futureValue]) => Future.value(futureValue);
+}
+
+/// 继承自Stream 意味着就是流对象
+class GetStreamTransformation<T> extends Stream<T> {
+  final AddSubscription<T> _addSubscription;
+  final RemoveSubscription<T> _removeSubscription;
+
+  GetStreamTransformation(this._addSubscription, this._removeSubscription);
+
+  @override
+  LightSubscription<T> listen(void Function(T event)? onData,
+      {Function? onError, void Function()? onDone, bool? cancelOnError}) {
+    final subs = LightSubscription<T>(_removeSubscription)
+      ..onData(onData)
+      ..onError(onError)
+      ..onDone(onDone);
+    _addSubscription(subs);
+    return subs;
+  }
 }
 
 class GetStream<T> {
+  void Function()? onListen;
+  void Function()? onPause;
+  void Function()? onResume;
+  FutureOr<void> Function()? onCancel;
+
   GetStream({this.onListen, this.onPause, this.onResume, this.onCancel});
 
-  /// 待刷新元素 列表
+  /// 待刷新元素 _onData列表
   List<LightSubscription<T>>? _onData = <LightSubscription<T>>[];
+
+  bool? _isBusy = false;
+
+  FutureOr<bool?> removeSubscription(LightSubscription<T> subs) async {
+    if (!_isBusy!) {
+      return _onData!.remove(subs);
+    } else {
+      await Future.delayed(Duration.zero);
+      return _onData?.remove(subs);
+    }
+  }
 
   /// 加上监听
   FutureOr<void> addSubscription(LightSubscription<T> subs) async {
@@ -522,6 +650,10 @@ class GetStream<T> {
       return _onData!.add(subs);
     }
   }
+
+  int? get length => _onData?.length;
+
+  bool get hasListeners => _onData!.isNotEmpty;
 
   /// 遍历_onData列表元素 猜测_data方法中 应该有setState
   void _notifyData(T data) {
@@ -534,25 +666,101 @@ class GetStream<T> {
     _isBusy = false;
   }
 
+  void _notifyError(Object error, [StackTrace? stackTrace]) {
+    assert(!isClosed, 'You cannot add errors to a closed stream.');
+    _isBusy = true;
+    var itemsToRemove = <LightSubscription<T>>[];
+    for (final item in _onData!) {
+      if (!item.isPaused) {
+        if (stackTrace != null) {
+          item._onError?.call(error, stackTrace);
+        } else {
+          item._onError?.call(error);
+        }
+
+        if (item.cancelOnError ?? false) {
+          //item.cancel?.call();
+          itemsToRemove.add(item);
+          item.pause();
+          item._onDone?.call();
+        }
+      }
+    }
+    for (final item in itemsToRemove) {
+      _onData!.remove(item);
+    }
+    _isBusy = false;
+  }
+
+  void _notifyDone() {
+    assert(!isClosed, 'You cannot close a closed stream.');
+    _isBusy = true;
+    for (final item in _onData!) {
+      if (!item.isPaused) {
+        item._onDone?.call();
+      }
+    }
+    _isBusy = false;
+  }
+
   T? _value;
 
   T? get value => _value;
-
-  bool get isClosed => _onData == null;
 
   /// 调用add后 再调用_notifyData
   void add(T event) {
     assert(!isClosed, 'You cannot add event to closed Stream');
     _value = event;
+
+    /// 开始刷新状态
     _notifyData(event);
   }
-}
 
+  bool get isClosed => _onData == null;
+
+  void addError(Object error, [StackTrace? stackTrace]) {
+    assert(!isClosed, 'You cannot add error to closed Stream');
+    _notifyError(error, stackTrace);
+  }
+
+  void close() {
+    assert(!isClosed, 'You cannot close a closed Stream');
+    _notifyDone();
+    _onData = null;
+    _isBusy = null;
+    _value = null;
+  }
+
+  LightSubscription<T> listen(void Function(T event) onData,
+      {Function? onError, void Function()? onDone, bool? cancelOnError}) {
+    final subs = LightSubscription<T>(
+      removeSubscription,
+      onPause: onPause,
+      onResume: onResume,
+      onCancel: onCancel,
+    )
+
+    /// .. 相当于给对象设置成员属性或者成员方法
+      ..onData(onData)
+      ..onError(onError)
+      ..onDone(onDone)
+      ..cancelOnError = cancelOnError;
+
+    /// _onData列表加上 该流的处理对象
+    addSubscription(subs);
+
+    onListen?.call();
+    return subs;
+  }
+
+  Stream<T> get stream =>
+      GetStreamTransformation(addSubscription, removeSubscription);
+}
 ```
 
-总结Rx<T>内置了GetStream实例，类似于ChangeNotifier，添加callBack回调，外部可以手动触发，同时Rx使用set Value时，会触发
-subject.add(_value), 内部就是自动刷新，使用get Value就是添加监听操作
-
+总结Rx<T>内置了GetStream实例，类似于ChangeNotifier，添加callBack回调，外部可以手动触发，
+使用set Value时，会触发 subject.add(_value), 内部就是自动刷新，
+使用get Value就是添加监听操作
 
 #### Obx刷新机制
 
@@ -599,17 +807,21 @@ abstract class ObxWidget extends StatefulWidget {
 
 class ObxState extends State<ObxWidget> {
 
-  /// 实例化一个 RxNotifier() 对象， 成为 _observer
+  /// 实例化一个 RxNotifier() 对象， 称为 _observer
+  /// class RxNotifier<T> = RxInterface<T> with NotifyManager<T>;
   final _observer = RxNotifier();
-  
+
   late StreamSubscription subs;
 
   @override
   void initState() {
     super.initState();
-    
+
     /// 初始化时 将setState 传到_observer的监听方法中 -> 引出疑问 RxNotifier 到底是什么呢
+    /// _updateTree 是传入的 onData方法
     subs = _observer.listen(_updateTree, cancelOnError: false);
+
+    /// 这里 源码走几步看看
   }
 
   void _updateTree(_) {
@@ -631,11 +843,70 @@ class ObxState extends State<ObxWidget> {
 }
 ```
 
-在哪里添加监听呢？？ 继续看上面 
+现在_observer拿到了这个obx组件的更新ui的方法，现在要将这个监听对象转移出去
+
+接着看方法 -> RxInterface.notifyChildren(_observer, widget.build);
+
+看类RxInterface
 
 ```dart
+/// 英文注释 说了啥
+/// 这个类是所有响应式(Rx)类的基础，正是这些类让Get变得如此强大。
+/// 这个接口是 _RxImpl<T> 在它的所有子类中使用的约定。
+abstract class RxInterface<T> {
+  static RxInterface? proxy;
 
+  bool get canUpdate;
+
+  /// Adds a listener to stream
+  void addListener(GetStream<T> rxGetx);
+
+  /// Close the Rx Variable
+  void close();
+
+  /// Calls `callback` with current value, when the value changes.
+  StreamSubscription<T> listen(void Function(T event) onData,
+      {Function? onError, void Function()? onDone, bool? cancelOnError});
+
+  /// Avoids an unsafe usage of the `proxy`
+  static T notifyChildren<T>(RxNotifier observer, ValueGetter<T> builder) {
+    /// RxInterface.proxy正常情况为空，但是作为中间变量，可能出现暂存对象的情况
+    /// 现在暂时将它的对象取出来，存在oldObserver变量中
+    final oldObserver = RxInterface.proxy;
+
+    /// 将在 _ObxState类中实例化的 RxNotifier() 对象的地址赋值给了RxInterface.proxy
+    RxInterface.proxy = observer;
+
+    /// 调用我们在外部传进的Widget
+    /// 如果这个Widget中有响应式变量，那么一定会调用该变量中获取 get value（不然ui怎么显示出来）
+    /// 标识 <getValue> -> 跳转到最最最重要！的一步
+    /// 在这里终于建立起联系了，将变量中 GetStream 实例，添加到了Obx中的 RxNotifier() 实例；
+    /// RxNotifier()实例中有一个 subject(GetStream) 实例，
+    /// Rx类型中数据变化会触发 subject 变化，最终刷新Obx
+    final result = builder();
+
+    /// 如果我们传入的Widget中没有Rx类型变量， _subscriptions数组就会为空，这个判断就会过不了
+    if (!observer.canUpdate) {
+      RxInterface.proxy = oldObserver;
+      throw """
+      [Get] the improper use of a GetX has been detected. 
+      You should only use GetX or Obx for the specific widget that will be updated.
+      If you are seeing this error, you probably did not insert any observable variables into GetX/Obx 
+      or insert them outside the scope that GetX considers suitable for an update 
+      (example: GetX => HeavyWidget => variableObservable).
+      If you need to update a parent widget and a child widget, wrap each one in an Obx/GetX.
+      """;
+    }
+
+    /// 最后将RxInterface.proxy中原来的值，重新赋给自己，
+    /// 至此 _ObxState 中的 _observer对象地址，进行了一番奇幻旅游后，结束了自己的使命（掘金作者原话）
+    RxInterface.proxy = oldObserver;
+    return result;
+  }
+}
 ```
+
+##### 总结
 
 
 
