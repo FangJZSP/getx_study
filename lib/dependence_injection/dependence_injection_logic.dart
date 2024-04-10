@@ -39,6 +39,7 @@ class DependenceInjectionLogic extends GetxController {
   void changeCat1() {
     state.cat1.value?.name = "${state.cat1.value?.name}wa";
     state.cat1.value?.age = (state.cat1.value?.age ?? 0) + 1;
+    // print(state.cat1.value);
     state.cat1.refresh();
   }
 
@@ -46,5 +47,8 @@ class DependenceInjectionLogic extends GetxController {
     state.cat2.value.name = "${state.cat2.value.name}la";
     state.cat2.value.age = (state.cat2.value.age ?? 0) - 1;
     state.cat2.refresh();
+    // state.cat2.update((val) {
+    //   val?.name = "???";
+    // });
   }
 }
