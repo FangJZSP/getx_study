@@ -32,7 +32,7 @@ class DependenceInjectionPage extends StatelessWidget {
             ),
             Obx(() {
               return Text(
-                state.count1.value.toString(),
+                state.count2.toString(),
                 style: Theme.of(context).textTheme.headlineMedium,
               );
             }),
