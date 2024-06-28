@@ -12,6 +12,22 @@ class FirstPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BaseScaffold(pageTitle: 'First');
+    return BaseScaffold(
+      pageTitle: 'First',
+      mainContent: mainContent(),
+    );
+  }
+
+  Widget mainContent() {
+    return Column(
+      children: [
+        Expanded(
+          child: TextButton(
+            onPressed: logic.goSecondPage,
+            child: Text('go second page'),
+          ),
+        ),
+      ],
+    );
   }
 }
