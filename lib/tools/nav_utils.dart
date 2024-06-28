@@ -24,9 +24,12 @@ class NavUtils {
     return Material(
       color: Colors.transparent,
       child: Center(
-        child: GestureDetector(
-          child: Text(arguments),
-          onTap: () => Get.back(),
+        child: Container(
+          color: Colors.redAccent,
+          child: GestureDetector(
+            child: Text(arguments),
+            onTap: () => Get.back(),
+          ),
         ),
       ),
     );

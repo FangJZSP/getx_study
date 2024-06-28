@@ -421,3 +421,38 @@ Route<dynamic> generator(RouteSettings settings) {
 
 #### 从`捣蛋弹窗`了解参数传递 - Get.arguments
 
+通过debug发现，路由先记录历史记录，记录的同时，GetObserver会通过Get.routing内置的update方法更新自己上一个路由。
+
+```dart
+  @override
+void didPush(Route route, Route? previousRoute) {
+  // ...
+  // 更新自己
+  _routeSend?.update((value) {
+    // Only PageRoute is allowed to change current value
+    if (route is PageRoute) {
+      value.current = newRoute.name ?? '';
+    }
+    final previousRouteName = _extractRouteName(previousRoute);
+    if (previousRouteName != null) {
+      value.previous = previousRouteName;
+    }
+
+    value.args = route.settings.arguments;
+    value.route = route;
+    value.isBack = false;
+    value.removed = '';
+    value.isBottomSheet =
+    newRoute.isBottomSheet ? true : value.isBottomSheet ?? false;
+    value.isDialog = newRoute.isDialog ? true : value.isDialog ?? false;
+  });
+
+  // ...
+}
+```
+
+当页面初始化时，此时上一个路由已经为弹窗，则传递给页面的参数获取不到。
+
+
+
+
