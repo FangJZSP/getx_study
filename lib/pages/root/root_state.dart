@@ -1,5 +1,5 @@
-class DemoState {
-  DemoState() {
+class RootState {
+  RootState() {
     ///Initialize variables
   }
 }
