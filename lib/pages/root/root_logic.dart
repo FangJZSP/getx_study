@@ -1,4 +1,5 @@
 import 'package:get/get.dart';
+import 'package:getx_study/tools/nav_utils.dart';
 
 import '../../route/routers.dart';
 import 'root_state.dart';
@@ -10,7 +11,12 @@ class RootLogic extends GetxController {
     Get.toNamed(Routers.first);
   }
 
+  // 演示 参数传递问题
   void goSecondPage() {
-    Get.toNamed(Routers.second);
+    Get.toNamed(Routers.second, arguments: '我是参数');
+    // NavUtils.showNormalDialog(
+    //   routeName: '捣乱分子',
+    // );
+    NavUtils.showNormalDialog(routeName: '捣乱分子', routeNodeArguments: '怎么会是我');
   }
 }

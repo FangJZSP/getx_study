@@ -22,11 +22,11 @@ Navigator顾名思义导航器。
 
 Navigator 是一个管理应用页面栈的组件，它负责处理页面之间的跳转、导航以及参数传递等操作。
 
-对于栈这个数据结构我们并不陌生，可以有效管理页面的进出。
+对于栈，这个数据结构我们并不陌生，可以有效管理元素的进出。
 
 ### GetX路由
 
-#### 从`Routers.getPage`了解GetX的Route的使命 - 静态配置
+#### 从`Routers.getPages`的构成了解GetX的Route的使命 - 静态配置
 
 从上述的讲解中我们可以知道Route其实就是一个页面的灵魂。那GetX是如何实现页面的灵魂的呢？
 
@@ -185,7 +185,7 @@ class _NavigatorPopObservation extends _NavigatorObservation {
 
 #### 从`Get.toNamed()` 了解GetX的路由跳转及页面生成 - 贯穿始终
 
-##### 路由的历史痕迹
+##### 路由的奇幻漂流 - 路由历史
 
 ```dart
   Future<T?>? toNamed<T>(String page, {
@@ -418,4 +418,6 @@ Route<dynamic> generator(RouteSettings settings) {
 ```
 
 上述文章已经讲了构建页面的方法，那最后，页面就回在createRoute中完成页面的build，至此页面的生成流程也介绍完毕。
+
+#### 从`捣蛋弹窗`了解参数传递 - Get.arguments
 

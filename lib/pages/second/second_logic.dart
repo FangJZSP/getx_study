@@ -4,4 +4,10 @@ import 'second_state.dart';
 
 class SecondLogic extends GetxController {
   final SecondState state = SecondState();
+
+  @override
+  void onInit() {
+    super.onInit();
+    state.a = Get.arguments;
+  }
 }
