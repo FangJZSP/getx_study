@@ -453,8 +453,6 @@ void didPush(Route route, Route? previousRoute) {
 
 当页面初始化时，此时上一个路由已经为弹窗，用get.arguments 传递给页面的参数获取不到。
 
-解决办法1，通过
+解决办法1，通过页面参数透传
 
-
-
-
+解决办法2，自己维护router表
