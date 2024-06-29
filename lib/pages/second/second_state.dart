@@ -5,3 +5,9 @@ class SecondState {
     ///Initialize variables
   }
 }
+
+class SecondPage {
+  String? a;
+
+  SecondPage(this.a);
+}

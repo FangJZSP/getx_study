@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:get/get.dart';
+import 'package:getx_study/tools/router_helper.dart';
 
 import 'route/routers.dart';
 
@@ -22,6 +23,9 @@ class MyApp extends StatelessWidget {
       ),
       initialRoute: '/',
       getPages: Routers.getPages,
+      routingCallback: (r) {
+        RouterHelper.collectRouters(r);
+      },
     );
   }
 }
