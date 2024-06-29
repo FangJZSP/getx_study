@@ -1,6 +1,6 @@
-代码仓库: https://github.com/FangJZSP/getx_study.git
-
 # GetX路由管理
+
+代码仓库: https://github.com/FangJZSP/getx_study.git
 
 ## 路由基础
 
