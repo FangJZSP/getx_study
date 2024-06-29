@@ -15,6 +15,6 @@ class SecondLogic extends GetxController {
     //     .firstWhereOrNull((element) =>
     //         (element is PageNodeRoute) && (element.current == Routers.second))
     //     ?.args;
-    state.a = RouterHelper.getMatchArg<SecondPage>(Routers.second)?.a;
+    state.a = RouterHelper.getMatchArg<SecondPageArgs>(Routers.second)?.a;
   }
 }

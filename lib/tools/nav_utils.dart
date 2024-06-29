@@ -11,8 +11,9 @@ class NavUtils {
     String? barrierLabel,
     bool useSafeArea = true,
   }) {
+    // todo dialog参数合法化
     return Get.dialog(
-      child ?? defaultChild(routeName + Get.arguments),
+      child ?? defaultChild(routeName + Get.arguments.toString()),
       barrierDismissible: barrierDismissible,
       barrierColor: barrierColor ?? Colors.black.withOpacity(0.5),
       routeSettings:

@@ -6,8 +6,8 @@ class SecondState {
   }
 }
 
-class SecondPage {
+class SecondPageArgs {
   String? a;
 
-  SecondPage(this.a);
+  SecondPageArgs(this.a);
 }

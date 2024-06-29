@@ -4,6 +4,15 @@ import '../pages/first/first_view.dart';
 import '../pages/root/root_view.dart';
 import '../pages/second/second_view.dart';
 
+enum DialogName {
+  dialog1,
+  ;
+
+  String get routeName {
+    return '/$name';
+  }
+}
+
 class Routers {
   static const root = '/';
   static const first = '/first';
