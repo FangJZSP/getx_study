@@ -5,7 +5,7 @@ import '../pages/root/root_view.dart';
 import '../pages/second/second_view.dart';
 
 enum DialogName {
-  dialog1,
+  naughtyDialog,
   ;
 
   String get routeName {
