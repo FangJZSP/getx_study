@@ -50,7 +50,7 @@ class RouterHelper {
     }
     NodeRoute? newRouting =
         PageNodeRoute(routing?.current, routing?.args, routing?.route);
-    _nodeRouteList.add(newRouting);
+    _nodeRouteList.insert(0, newRouting);
     for (var r in _nodeRouteList) {
       print('name: ${r.route?.settings.name ?? ''} args: ${r.args}');
     }
