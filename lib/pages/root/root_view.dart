@@ -32,6 +32,12 @@ class RootPage extends StatelessWidget {
             child: Text('go second page'),
           ),
         ),
+        Expanded(
+          child: TextButton(
+            onPressed: logic.goTestPage,
+            child: Text('goTestPage'),
+          ),
+        ),
       ],
     );
   }

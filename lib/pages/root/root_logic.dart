@@ -24,4 +24,8 @@ class RootLogic extends GetxController {
         routeName: DialogName.naughtyDialog.routeName,
         routeNodeArguments: '怎么会是我');
   }
+
+  void goTestPage() {
+    Get.toNamed(Routers.testChangeNotifier);
+  }
 }
